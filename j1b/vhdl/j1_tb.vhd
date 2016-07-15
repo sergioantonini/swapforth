@@ -174,29 +174,40 @@ architecture test of j1_tb is
   end function;
 
   -- Program and data memory
-  signal ram      : T_RAM_PROG := read_ram;
+  shared variable ram      : T_RAM_PROG := read_ram;
   signal codeaddr : unsigned(12 downto 0);
-
+ signal ram_data : std_logic_vector(31 downto 0);
+  signal code_sel : std_logic;
 begin  -- architecture test
-  codeaddr <= '0' & code_addr(12 downto 1);
+ codeaddr <= '0' & code_addr(12 downto 1);
   -- Program and data memory
+  P2a : process (clk) is
+  begin  -- process
+    if clk'event and clk = '1' then     -- rising clock edge
+      ram_data <= ram(to_integer(unsigned(codeaddr)));
+    end if;
+  end process;
+
   P2 : process (clk) is
+  begin
+    if clk'event and clk = '1' then     -- rising clock edge
+     code_sel <= code_addr(0);	
+    end if;
+  end process;
+
+  insn <= ram_data(31 downto 16) when code_sel='1' else ram_data(15 downto 0);
+
+  P2b : process (clk) is
     variable ram_data : std_logic_vector(31 downto 0);
   begin  -- process
     if clk'event and clk = '1' then     -- rising clock edge
-      ram_data := ram(to_integer(unsigned(codeaddr)));
-      if code_addr(0) = '1' then
-        insn <= ram_data(31 downto 16);
-      else
-        insn <= ram_data(15 downto 0);
-      end if;
       if mem_wr = '1' then
-        ram(to_integer(unsigned(mem_addr(14 downto 2)))) <= dout;
+        ram(to_integer(unsigned(mem_addr(14 downto 2)))) := dout;
       end if;
       mem_din <= ram(to_integer(unsigned(mem_addr(14 downto 2))));
     end if;
   end process;
-
+  
   -- I/O service
   P3 : process(clk) is
   begin
