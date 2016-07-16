@@ -101,7 +101,7 @@ architecture beh of j1 is
 --endmodule
 begin  -- architecture beh
 
-  pc_plus_1  <= pc + 1;               
+  pc_plus_1  <= pc + 1;
   mem_addr   <= unsigned(st0(15 downto 0));
   code_addr  <= pcN;
   minus      <= unsigned('1' & not st0) + unsigned(st1) + 1;
@@ -132,7 +132,7 @@ begin  -- architecture beh
       wd    => rstkD,
       we    => rstkW);
 
-  process(dsp, insn, io_din, minus, pc, rst0, signedless, st0, st1)
+  process(dsp, insn, io_din, minus, pc(12), rst0, signedless, st0, st1)
     variable case_sel : std_logic_vector(8 downto 0);
   begin
     --  always @*
@@ -216,18 +216,18 @@ begin  -- architecture beh
   end process;
 
 --  wire func_T_N =   (insn[6:4] == 1);
-  func_T_N <= '1' when insn(6 downto 4)="001" else '0';
+  func_T_N   <= '1' when insn(6 downto 4) = "001" else '0';
 --  wire func_T_R =   (insn[6:4] == 2);
-  func_T_R   <= '1' when insn(6 downto 4)="010" else '0';
+  func_T_R   <= '1' when insn(6 downto 4) = "010" else '0';
 --  wire func_write = (insn[6:4] == 3);
-  func_write <= '1' when insn(6 downto 4)="011" else '0';
+  func_write <= '1' when insn(6 downto 4) = "011" else '0';
 --  wire func_iow =   (insn[6:4] == 4);
-  func_iow   <= '1' when insn(6 downto 4)="100" else '0';
+  func_iow   <= '1' when insn(6 downto 4) = "100" else '0';
 --  wire func_ior =   (insn[6:4] == 5);
-  func_ior   <= '1' when insn(6 downto 4)="101" else '0';
+  func_ior   <= '1' when insn(6 downto 4) = "101" else '0';
 
 --  wire is_alu = !pc[12] & (insn[15:13] == 3'b011);
-  is_alu <= '1' when (pc(12)='0') and (insn(15 downto 13) = "011") else '0';
+  is_alu <= '1' when (pc(12) = '0') and (insn(15 downto 13) = "011") else '0';
 --  assign mem_wr = !reboot & is_alu & func_write;
   mem_wr <= (not reboot) and is_alu and func_write;
   dout   <= st1;
@@ -245,72 +245,70 @@ begin  -- architecture beh
     end if;
   end process;
 
-  process (func_T_N, insn, pc) is
-    variable psel : std_logic_vector(3 downto 0);
+  process (dsp, dspI, func_T_N, func_T_R, insn, pc(12), pc_plus_1,
+           reboot, rst0, st0) is
+    variable psel1 : std_logic_vector(3 downto 0);
+    variable psel2 : std_logic_vector(3 downto 0);
+    variable psel3 : std_logic_vector(6 downto 0);
   begin  -- process
     --  always @*
     --  begin
     --    casez ({pc[12], insn[15:13]})
-    psel := pc(12) & insn(15 downto 13);
+    psel1 := pc(12) & insn(15 downto 13);
     --    4'b1_???,
     --    4'b0_1??:   {dstkW, dspI} = {1'b1,      2'b01};
-    if std_match(psel, "1---") or std_match(psel, "01--") then
+    if std_match(psel1, "1---") or std_match(psel1, "01--") then
       dstkW <= '1'; dspI <= "01";
     --    4'b0_001:   {dstkW, dspI} = {1'b0,      2'b11};
-    elsif std_match(psel, "0001") then
+    elsif std_match(psel1, "0001") then
       dstkW <= '0'; dspI <= "11";
     --    4'b0_011:   {dstkW, dspI} = {func_T_N,  {insn[1:0]}};
-    elsif std_match(psel, "0011") then
+    elsif std_match(psel1, "0011") then
       dstkW <= func_T_N; dspI <= insn(1 downto 0);
     --    default:    {dstkW, dspI} = {1'b0,      2'b00};
     else
       dstkW <= '0'; dspI <= "00";
 --    endcase
     end if;
-  end process;
---    dspN = dsp + {dspI[1], dspI[1], dspI};
-  dspN <= dsp + unsigned(dspI(1) & dspI(1) & dspI);
 
-  process (func_T_R, insn, pc) is
+--    dspN = dsp + {dspI[1], dspI[1], dspI};
+    dspN <= dsp + unsigned(dspI(1) & dspI(1) & dspI);
+
+
 --    casez ({pc[12], insn[15:13]})
-    variable psel : std_logic_vector(3 downto 0);
-  begin  -- process
-    psel := pc(12) & insn(15 downto 13);
+
+    psel2 := pc(12) & insn(15 downto 13);
     --    4'b1_???:   {rstkW, rspI} = {1'b0,      2'b11};
-    if std_match(psel, "1---") then
+    if std_match(psel2, "1---") then
       rstkW <= '0'; rspI <= "11";
     --    4'b0_010:   {rstkW, rspI} = {1'b1,      2'b01};
-    elsif std_match(psel, "0010") then
+    elsif std_match(psel2, "0010") then
       rstkW <= '1'; rspI <= "01";
     --    4'b0_011:   {rstkW, rspI} = {func_T_R,  insn[3:2]};
-    elsif std_match(psel, "0011") then
+    elsif std_match(psel2, "0011") then
       rstkW <= func_T_R; rspI <= insn(3 downto 2);
     --    default:    {rstkW, rspI} = {1'b0,      2'b00};
     else
       rstkW <= '0'; rspI <= "00";
 --    endcase
     end if;
-  end process;
 
-  process (insn, pc, pc_plus_1,
-           reboot, rst0, st0) is
-    variable psel : std_logic_vector(6 downto 0);
-  begin  -- process
+
     --    casez ({reboot, pc[12], insn[15:13], insn[7], |st0})
-    psel := reboot & pc(12) & insn(15 downto 13) & insn(7) & or_reduce(st0);
+    psel3 := reboot & pc(12) & insn(15 downto 13) & insn(7) & or_reduce(st0);
     --    7'b1_0_???_?_?:   pcN = 0;
-    if std_match(psel, "10-----") then
+    if std_match(psel3, "10-----") then
       --report "PC reset " & integer'image(to_integer(unsigned(insn))) & " pc:" & integer'image(to_integer(pc)) severity note;
       pcN <= (others => '0');
     --    7'b0_0_000_?_?,
     --    7'b0_0_010_?_?,
     --    7'b0_0_001_?_0:   pcN = insn[12:0];
-    elsif std_match(psel, "00000--") or std_match(psel, "00010--") or std_match(psel, "00001-0") then
+    elsif std_match(psel3, "00000--") or std_match(psel3, "00010--") or std_match(psel3, "00001-0") then
       --report "jump " & integer'image(to_integer(unsigned(insn))) & " pc:" & integer'image(to_integer(pc)) severity note;
       pcN <= unsigned(insn(12 downto 0));
     --    7'b0_1_???_?_?,
     --    7'b0_0_011_1_?:   pcN = rst0[13:1];
-    elsif std_match(psel, "01-----") or std_match(psel, "000111-") then
+    elsif std_match(psel3, "01-----") or std_match(psel3, "000111-") then
       pcN <= unsigned(rst0(13 downto 1));
       --report "PC from rst0 " & integer'image(to_integer(unsigned(insn))) & " pc:" & integer'image(to_integer(pc)) & " psel:" & integer'image(to_integer(unsigned(psel))) severity note;
 
@@ -341,9 +339,9 @@ begin  -- architecture beh
       st0    <= (others => '0');
     elsif clk'event and clk = '1' then  -- rising clock edge
       reboot <= '0';
-      pc  <= pcN;
-      dsp <= dspN;
-      st0 <= st0N;
+      pc     <= pcN;
+      dsp    <= dspN;
+      st0    <= st0N;
     end if;
   end process;
 
