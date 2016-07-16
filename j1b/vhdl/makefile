@@ -1,5 +1,5 @@
 VHDLS = \
-  stack.vhd \
+  stack_mem.vhd \
   j1.vhd \
   uart/ghdl_uart_pkg.vhd \
   uart/ghdl_uart.vhd \

@@ -98,7 +98,7 @@ begin  -- architecture rtl
 
   --always @*
   --begin
-  process (dsp, insn(14 downto 0), insn(15 downto 8), io_din, mem_din, rst0,
+  process (dsp, insn, io_din, mem_din, rst0,
            st0, st1) is
     variable psel : std_logic_vector(7 downto 0);
   begin  -- process
@@ -208,11 +208,8 @@ begin  -- architecture rtl
     end if;
   end process;
 
-  process (dsp, dspI, func_T_N, func_T_R, insn, pc_plus_1, reboot,
-           rst0, st0) is
+  process (func_T_N, insn(1 downto 0), insn(15 downto 13)) is
     variable psel1 : std_logic_vector(2 downto 0);
-    variable psel2 : std_logic_vector(2 downto 0);
-    variable psel3 : std_logic_vector(5 downto 0);
   begin  -- process
     --casez ({insn[15:13]})
     psel1 := insn(15 downto 13);
@@ -229,9 +226,13 @@ begin  -- architecture rtl
     else
       dstkW <= '0'; dspI <= "00";
     end if;
+  end process;
 
-    dspN <= std_logic_vector(unsigned(dsp) + unsigned(dspI(1) & dspI(1) & dspI(1) & dspI));
+  dspN <= std_logic_vector(unsigned(dsp) + unsigned(dspI(1) & dspI(1) & dspI(1) & dspI));
 
+  process (func_T_R, insn(15 downto 13), insn(3 downto 2)) is
+    variable psel2 : std_logic_vector(2 downto 0);
+  begin
     --casez ({insn[15:13]})
     psel2 := insn(15 downto 13);
     --3'b010:   {rstkW, rspI} = {1'b1,      2'b01};
@@ -244,7 +245,12 @@ begin  -- architecture rtl
     else
       rstkW <= '0'; rspI <= "00";
     end if;
+  end process;
 
+  process (insn, pc_plus_1, reboot,
+           rst0, st0) is
+    variable psel3 : std_logic_vector(5 downto 0);
+  begin
     --casez ({reboot, insn[15:13], insn[7], |st0})
     psel3 := reboot & insn(15 downto 13) & insn(7) & or_reduce(st0);
     --6'b1_???_?_?:   pcN = 0;
