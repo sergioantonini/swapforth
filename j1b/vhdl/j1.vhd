@@ -17,6 +17,7 @@ entity j1 is
     resetq    : in  std_logic;
     io_rd     : out std_logic;
     io_wr     : out std_logic;
+    io_ready  : in  std_logic;
     mem_addr  : out unsigned(15 downto 0);
     mem_wr    : out std_logic;
     dout      : out std_logic_vector(WIDTH-1 downto 0);
@@ -33,6 +34,7 @@ architecture rtl of j1 is
   signal st0, st0N : std_logic_vector(WIDTH-1 downto 0);  -- Top of data stack
   signal dstkW     : std_logic;                           -- D stack write
 
+  signal s_io_wr, s_io_rd                                           : std_logic;
   signal pc, pcN, pc_plus_1                                         : std_logic_vector(12 downto 0);
   signal rstkW                                                      : std_logic;  -- R stack write
   signal rstkD                                                      : std_logic_vector(WIDTH-1 downto 0);  -- R stack write value
@@ -41,6 +43,8 @@ architecture rtl of j1 is
   signal func_T_N, func_T_R, func_write, func_iow, func_ior, is_alu : std_logic;
   signal dspI, rspI                                                 : std_logic_vector(1 downto 0);
 
+  signal no_wait : boolean;
+  
   function or_reduce (
     constant vec : std_logic_vector)
     return std_logic is
@@ -70,7 +74,6 @@ architecture rtl of j1 is
 begin  -- architecture rtl
   pc_plus_1 <= std_logic_vector(unsigned(pc) + 1);
   mem_addr  <= unsigned(st0(15 downto 0));
-  code_addr <= unsigned(pcN);
 
   -- The D and R stacks
   --stack #(.DEPTH(32)) dstack(.clk(clk), .rd(st1),  .we(dstkW), .wd(st0),   .delta(dspI));
@@ -191,12 +194,13 @@ begin  -- architecture rtl
   func_iow   <= '1' when insn(6 downto 4) = "100" else '0';
   func_ior   <= '1' when insn(6 downto 4) = "101" else '0';
 
-  is_alu <= '1' when insn(15 downto 13) = "011" else '0';
-  mem_wr <= (not reboot) and is_alu and func_write;
-  dout   <= st1;
-  io_wr  <= (not reboot) and is_alu and func_iow;
-  io_rd  <= (not reboot) and is_alu and func_ior;
-
+  is_alu  <= '1' when insn(15 downto 13) = "011" else '0';
+  mem_wr  <= (not reboot) and is_alu and func_write;
+  dout    <= st1;
+  s_io_wr <= (not reboot) and is_alu and func_iow;
+  s_io_rd <= (not reboot) and is_alu and func_ior;
+  io_wr   <= s_io_wr;
+  io_rd   <= s_io_rd;
   --assign rstkD = (insn[13] == 1'b0) ? {{(`WIDTH - 14){1'b0}}, pc_plus_1, 1'b0} : st0;
   process (insn(13), pc_plus_1, st0) is
   begin  -- process
@@ -270,6 +274,12 @@ begin  -- architecture rtl
     end if;
   end process;
 
+
+  -- The simplistic implementation of I/O wait needed for more complex I/O
+  -- busses. No timeout. Corrupted peripheral may hang the system
+  no_wait <= (io_ready = '1') or ((s_io_wr = '0') and (s_io_rd = '0'));
+  code_addr <= unsigned(pcN) when no_wait else unsigned(pc);
+
   process (clk, resetq) is
   begin  -- process
     if resetq = '0' then                -- asynchronous reset (active low)
@@ -279,9 +289,11 @@ begin  -- architecture rtl
       st0    <= (others => '0');
     elsif clk'event and clk = '1' then  -- rising clock edge
       reboot <= '0';
-      pc     <= pcN;
-      dsp    <= dspN;
-      st0    <= st0N;
+      if no_wait then 
+        pc  <= pcN;
+        dsp <= dspN;
+        st0 <= st0N;
+      end if;
     end if;
   end process;
 

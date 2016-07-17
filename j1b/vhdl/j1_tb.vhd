@@ -42,6 +42,7 @@ architecture test of j1_tb is
       resetq    : in  std_logic;
       io_rd     : out std_logic;
       io_wr     : out std_logic;
+      io_ready  : in  std_logic;
       mem_addr  : out unsigned(15 downto 0);
       mem_wr    : out std_logic;
       dout      : out std_logic_vector(WIDTH-1 downto 0);
@@ -71,12 +72,16 @@ architecture test of j1_tb is
   signal dout, dout_d                     : std_logic_vector(31 downto 0);
   signal insn                             : std_logic_vector(15 downto 0);
   signal io_din, mem_din                  : std_logic_vector(31 downto 0);
+  signal io_ready                         : std_logic;
   signal io_rd, io_rd_d                   : std_logic;
   signal io_wr, io_wr_d                   : std_logic;
   signal mem_addr, mem_addr_d             : unsigned(15 downto 0);
-  signal io_addr, io_addr_d               : unsigned(15 downto 0);
+  signal io_addr_d                        : unsigned(15 downto 0);
   signal mem_wr                           : std_logic;
   signal resetq                           : std_logic := '0';
+
+  signal wb_test_dout      : std_logic_vector(31 downto 0);
+  signal wb_addr, wb_addr_d, wb_ready : std_logic;
 
   -- clock
   signal Clk : std_logic := '1';
@@ -175,12 +180,12 @@ architecture test of j1_tb is
   end function;
 
   -- Program and data memory
-  shared variable ram      : T_RAM_PROG := read_ram;
-  signal codeaddr : unsigned(12 downto 0);
- signal ram_data : std_logic_vector(31 downto 0);
-  signal code_sel : std_logic;
+  shared variable ram : T_RAM_PROG := read_ram;
+  signal codeaddr     : unsigned(12 downto 0);
+  signal ram_data     : std_logic_vector(31 downto 0);
+  signal code_sel     : std_logic;
 begin  -- architecture test
- codeaddr <= '0' & code_addr(12 downto 1);
+  codeaddr <= '0' & code_addr(12 downto 1);
   -- Program and data memory
   P2a : process (clk) is
   begin  -- process
@@ -192,11 +197,11 @@ begin  -- architecture test
   P2 : process (clk) is
   begin
     if clk'event and clk = '1' then     -- rising clock edge
-     code_sel <= code_addr(0);	
+      code_sel <= code_addr(0);
     end if;
   end process;
 
-  insn <= ram_data(31 downto 16) when code_sel='1' else ram_data(15 downto 0);
+  insn <= ram_data(31 downto 16) when code_sel = '1' else ram_data(15 downto 0);
 
   P2b : process (clk) is
     variable ram_data : std_logic_vector(31 downto 0);
@@ -208,13 +213,14 @@ begin  -- architecture test
       mem_din <= ram(to_integer(unsigned(mem_addr(14 downto 2))));
     end if;
   end process;
-  
+
   -- I/O service
   P3 : process(clk) is
   begin
     if clk'event and clk = '1' then     -- rising clock edge
       io_rd_d <= io_rd;
       io_wr_d <= io_wr;
+      wb_addr_d <= wb_addr;
       dout_d  <= dout;
       if io_wr = '1' or io_rd = '1' then
         io_addr_d <= mem_addr;
@@ -222,13 +228,77 @@ begin  -- architecture test
     end if;
   end process;
 
-  uart_wr  <= io_wr_d and io_addr_d(12);
-  uart_rd  <= io_rd_d and io_addr_d(12);
+  uart_wr  <= '1' when io_wr_d='1' and io_addr_d=x"1000" else '0';
+  uart_rd  <= '1' when io_rd_d='1' and io_addr_d=x"1000" else '0';
   uart_din <= dout_d(7 downto 0);
 
-  io_din <= x"000000" & uart_dout when io_addr_d(12) = '1' else
-            (0      => uart_ready, 1 => uart_dav, others => '0') when io_addr_d(13) = '1' else
+
+  -- Process simulating the slow peripheral
+  wb1 : block is
+    signal wb_rd, wb_rd_d : std_logic;
+    signal del_cnt        : integer;
+  begin  -- block wb1
+    wb_rd <= '1' when wb_addr = '1' and io_rd = '1' else '0';
+    process (clk, resetq) is
+      variable v_wb_rdy,v_io_rdy,v_io_rd, v_io_wr : character;
+    begin  -- process
+      if resetq = '0' then                -- asynchronous reset (active low)
+        wb_test_dout <= x"01233210";
+        wb_rd_d      <= '0';
+        del_cnt      <= 0;
+        wb_ready     <= '0';
+      elsif clk'event and clk = '1' then  -- rising clock edge
+        if wb_addr='1' then
+          if io_rd='1' then
+            v_io_rd := '1';
+          else
+            v_io_rd := '0';
+          end if;
+          if io_wr='1' then
+            v_io_wr := '1';
+          else
+            v_io_wr := '0';
+          end if;
+          if wb_ready='1' then
+            v_wb_rdy := '1';
+          else
+            v_wb_rdy := '0';
+          end if;
+          if  io_ready='1' then
+            v_io_rdy := '1';
+          else
+            v_io_rdy := '0';
+          end if;
+          report "pc=" & integer'image(to_integer(codeaddr)) & " insn=" & integer'image(to_integer(unsigned(insn))) & " wb_ready=" & v_wb_rdy & " io_ready=" & v_io_rdy & " io_wr=" & v_io_wr & " io_rd=" & v_io_rd severity note; 
+        end if;
+        if wb_rd = '0' then
+          del_cnt      <= 0;
+          wb_test_dout <= x"23452345";
+          wb_ready     <= '0';
+        else
+          if wb_rd = '1' then
+            wb_test_dout <= x"77711777";
+            report "wait state: " & integer'image(del_cnt) severity note;
+            del_cnt <= del_cnt+1;
+            wb_ready     <= '0';
+          end if;
+          if del_cnt >= 3 then
+            report "wait state finished" severity note;
+            wb_ready     <= '1';
+            wb_test_dout <= x"55667788";
+          end if;
+        end if;
+      end if;
+    end process;
+
+  end block wb1;
+
+  io_din <= x"000000" & uart_dout when io_addr_d = x"1000" else
+            (0      => uart_ready, 1 => uart_dav, others => '0') when io_addr_d = x"2000" else
+            wb_test_dout                                         when wb_addr_d = '1' else
             (others => '0');
+  wb_addr <= '1' when mem_addr(15 downto 12) = x"8" else '0';
+  io_ready <= wb_ready when wb_addr = '1' else '1';
 
   -- component instantiation
   DUT : j1
@@ -239,6 +309,7 @@ begin  -- architecture test
       resetq    => resetq,
       io_rd     => io_rd,
       io_wr     => io_wr,
+      io_ready  => io_ready,
       mem_wr    => mem_wr,
       dout      => dout,
       mem_din   => mem_din,
@@ -271,48 +342,48 @@ begin  -- architecture test
     wait;
   end process WaveGen_Proc;
 
- -- Special process used to dump the memory image
- -- It may be used to dump the memory with the compiled words and reuse it
- process (clk) is
-   file ram_image : text;
-   variable wrline : line;
-   variable mw : std_logic_vector(31 downto 0);
-   variable vc : character;
- begin  -- process
-   if clk'event and clk='1' then
-     if io_rd_d='1' and io_addr_d=x"2345" then
-       file_open(ram_image, "mem_dump.hex", write_mode);
-       for i in 0 to 8191 loop
-         mw := ram(i);
-         for j in 0 to 7 loop
-           case mw(31 downto 28) is
-             when "0000" => vc := '0';
-             when "0001" => vc := '1';
-             when "0010" => vc := '2';
-             when "0011" => vc := '3';
-             when "0100" => vc := '4';
-             when "0101" => vc := '5';
-             when "0110" => vc := '6';
-             when "0111" => vc := '7';
-             when "1000" => vc := '8';
-             when "1001" => vc := '9';
-             when "1010" => vc := 'A';
-             when "1011" => vc := 'B';
-             when "1100" => vc := 'C';
-             when "1101" => vc := 'D';
-             when "1110" => vc := 'E';
-             when "1111" => vc := 'F';
-             when others => vc := 'X';
-           end case;
-           write(wrline,vc);
-           mw := mw(27 downto 0) & "0000";
-         end loop;  -- j
-         writeline(ram_image,wrline);
-       end loop;  -- i
-       file_close(ram_image);
-     end if;
-   end if;
- end process;
+  -- Special process used to dump the memory image
+  -- It may be used to dump the memory with the compiled words and reuse it
+  process (clk) is
+    file ram_image  : text;
+    variable wrline : line;
+    variable mw     : std_logic_vector(31 downto 0);
+    variable vc     : character;
+  begin  -- process
+    if clk'event and clk = '1' then
+      if io_rd_d = '1' and io_addr_d = x"2345" then
+        file_open(ram_image, "mem_dump.hex", write_mode);
+        for i in 0 to 8191 loop
+          mw := ram(i);
+          for j in 0 to 7 loop
+            case mw(31 downto 28) is
+              when "0000" => vc := '0';
+              when "0001" => vc := '1';
+              when "0010" => vc := '2';
+              when "0011" => vc := '3';
+              when "0100" => vc := '4';
+              when "0101" => vc := '5';
+              when "0110" => vc := '6';
+              when "0111" => vc := '7';
+              when "1000" => vc := '8';
+              when "1001" => vc := '9';
+              when "1010" => vc := 'A';
+              when "1011" => vc := 'B';
+              when "1100" => vc := 'C';
+              when "1101" => vc := 'D';
+              when "1110" => vc := 'E';
+              when "1111" => vc := 'F';
+              when others => vc := 'X';
+            end case;
+            write(wrline, vc);
+            mw := mw(27 downto 0) & "0000";
+          end loop;  -- j
+          writeline(ram_image, wrline);
+        end loop;  -- i
+        file_close(ram_image);
+      end if;
+    end if;
+  end process;
 
 end architecture test;
 
