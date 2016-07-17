@@ -7,7 +7,7 @@
 -- Company    :
 -- License    : BSD License
 -- Created    : 2016-07-07
--- Last update: 2016-07-13
+-- Last update: 2016-07-17
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -170,6 +170,7 @@ architecture test of j1_tb is
       i       := i+1;
     end loop;
     report "finished RAM initialization" severity note;
+    file_close(ramini);
     return vram;
   end function;
 
@@ -270,7 +271,48 @@ begin  -- architecture test
     wait;
   end process WaveGen_Proc;
 
-
+ -- Special process used to dump the memory image
+ -- It may be used to dump the memory with the compiled words and reuse it
+ process (clk) is
+   file ram_image : text;
+   variable wrline : line;
+   variable mw : std_logic_vector(31 downto 0);
+   variable vc : character;
+ begin  -- process
+   if clk'event and clk='1' then
+     if io_rd_d='1' and io_addr_d=x"2345" then
+       file_open(ram_image, "mem_dump.hex", write_mode);
+       for i in 0 to 8191 loop
+         mw := ram(i);
+         for j in 0 to 7 loop
+           case mw(31 downto 28) is
+             when "0000" => vc := '0';
+             when "0001" => vc := '1';
+             when "0010" => vc := '2';
+             when "0011" => vc := '3';
+             when "0100" => vc := '4';
+             when "0101" => vc := '5';
+             when "0110" => vc := '6';
+             when "0111" => vc := '7';
+             when "1000" => vc := '8';
+             when "1001" => vc := '9';
+             when "1010" => vc := 'A';
+             when "1011" => vc := 'B';
+             when "1100" => vc := 'C';
+             when "1101" => vc := 'D';
+             when "1110" => vc := 'E';
+             when "1111" => vc := 'F';
+             when others => vc := 'X';
+           end case;
+           write(wrline,vc);
+           mw := mw(27 downto 0) & "0000";
+         end loop;  -- j
+         writeline(ram_image,wrline);
+       end loop;  -- i
+       file_close(ram_image);
+     end if;
+   end if;
+ end process;
 
 end architecture test;
 
