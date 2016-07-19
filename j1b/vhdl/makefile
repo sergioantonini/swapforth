@@ -3,6 +3,8 @@ VHDLS = \
   j1.vhd \
   uart/ghdl_uart_pkg.vhd \
   uart/ghdl_uart.vhd \
+  wb/j1b2wb.vhd \
+  wb_slave/my_regs.vhd \
   j1_tb.vhd \
   
 STD=standard

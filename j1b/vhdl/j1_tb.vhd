@@ -7,7 +7,7 @@
 -- Company    :
 -- License    : BSD License
 -- Created    : 2016-07-07
--- Last update: 2016-07-17
+-- Last update: 2016-07-19
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -62,8 +62,56 @@ architecture test of j1_tb is
       rd       : in  std_logic;
       wr       : in  std_logic);
   end component ghdl_uart;
+  
+  component j1b2wb is
+    generic (
+      ADRWIDTH  : integer;
+      DATAWIDTH : integer);
+    port (
+      J1B_CLK      : in  std_logic;
+      J1B_ARESETN  : in  std_logic;
+      J1B_IO_RD    : in  std_logic;
+      J1B_IO_WR    : in  std_logic;
+      J1B_IO_READY : out std_logic;
+      J1B_IO_ADDR  : in  std_logic_vector(15 downto 0);
+      J1B_DOUT     : in  std_logic_vector(31 downto 0);
+      J1B_DIN      : out std_logic_vector(31 downto 0);
+      J1B_WB_DATA  : in  std_logic;
+      J1B_WB_REGS  : in  std_logic;
+      wb_clk_o     : out std_logic;
+      wb_rst_o     : out std_logic;
+      wb_addr_o    : out std_logic_vector(31 downto 0);
+      wb_dat_o     : out std_logic_vector(31 downto 0);
+      wb_we_o      : out std_logic;
+      wb_sel_o     : out std_logic_vector(3 downto 0);
+      wb_stb_o     : out std_logic;
+      wb_cyc_o     : out std_logic;
+      wb_dat_i     : in  std_logic_vector(31 downto 0);
+      wb_err_i     : in  std_logic;
+      wb_ack_i     : in  std_logic);
+  end component j1b2wb;
 
-
+  component wb_test_slave is
+    port (
+      rst_n_i    : in  std_logic;
+      clk_sys_i  : in  std_logic;
+      wb_adr_i   : in  std_logic_vector(2 downto 0);
+      wb_dat_i   : in  std_logic_vector(31 downto 0);
+      wb_dat_o   : out std_logic_vector(31 downto 0);
+      wb_cyc_i   : in  std_logic;
+      wb_sel_i   : in  std_logic_vector(3 downto 0);
+      wb_stb_i   : in  std_logic;
+      wb_we_i    : in  std_logic;
+      wb_ack_o   : out std_logic;
+      wb_stall_o : out std_logic;
+      wbt_led_o  : out std_logic_vector(7 downto 0);
+      wbt_key_i  : in  std_logic_vector(4 downto 0);
+      wbt_sw_i   : in  std_logic_vector(3 downto 0);
+      wbt_do1_o  : out std_logic_vector(31 downto 0);
+      wbt_do2_o  : out std_logic_vector(31 downto 0);
+      wbt_di1_i  : in  std_logic_vector(31 downto 0));
+  end component wb_test_slave;
+  
 -- component ports
   signal uart_rd, uart_wr                 : std_logic;
   signal uart_din, uart_dout              : std_logic_vector(7 downto 0);
@@ -83,6 +131,29 @@ architecture test of j1_tb is
   signal wb_test_dout      : std_logic_vector(31 downto 0);
   signal wb_addr, wb_addr_d, wb_ready : std_logic;
 
+  signal jwb_data, jwb_regs, jwb_ready : std_logic;
+  signal jwb_dout : std_logic_vector(31 downto 0);
+  
+  signal wb_addr_o   : std_logic_vector(31 downto 0);
+  signal wb_dat_i   : std_logic_vector(31 downto 0);
+  signal wb_dat_o   : std_logic_vector(31 downto 0);
+  signal wb_rst_o   : std_logic;
+  signal wb_clk_o   : std_logic;
+  signal wb_cyc_o   : std_logic;
+  signal wb_sel_o   : std_logic_vector(3 downto 0);
+  signal wb_stb_o   : std_logic;
+  signal wb_we_o   : std_logic;
+  signal wb_ack_i   : std_logic;
+  signal wb_err_i   : std_logic := '0';
+  signal wb_stall_i : std_logic;
+
+  signal wbt_led_o  : std_logic_vector(7 downto 0);
+  signal wbt_key_i  : std_logic_vector(4 downto 0) := "11010";
+  signal wbt_sw_i   : std_logic_vector(3 downto 0) := "0101";
+  signal wbt_do1_o  : std_logic_vector(31 downto 0);
+  signal wbt_do2_o  : std_logic_vector(31 downto 0);
+  signal wbt_di1_i  : std_logic_vector(31 downto 0);
+  
   -- clock
   signal Clk : std_logic := '1';
   type T_RAM_PROG is array(0 to 8191) of std_logic_vector(31 downto 0);
@@ -293,12 +364,69 @@ begin  -- architecture test
 
   end block wb1;
 
+  jwb_regs <= '1' when mem_addr(15 downto 8)=x"60" else '0';
+  jwb_data <= '1' when mem_addr(15 downto 8)=x"61" else '0';
+  
+  
+  j1b2wb_1: j1b2wb
+    generic map (
+      ADRWIDTH  => 8,
+      DATAWIDTH => 32)
+    port map (
+      J1B_CLK      => clk,
+      J1B_ARESETN  => resetq,
+      J1B_IO_RD    => io_rd,
+      J1B_IO_WR    => io_wr,
+      J1B_IO_READY => jwb_ready,
+      J1B_IO_ADDR  => std_logic_vector(mem_addr),
+      J1B_DOUT     => dout,
+      J1B_DIN      => jwb_dout,
+      J1B_WB_DATA  => jwb_data,
+      J1B_WB_REGS  => jwb_regs,
+      wb_clk_o     => wb_clk_o,
+      wb_rst_o     => wb_rst_o,
+      wb_addr_o    => wb_addr_o,
+      wb_dat_o     => wb_dat_o,
+      wb_we_o      => wb_we_o,
+      wb_sel_o     => wb_sel_o,
+      wb_stb_o     => wb_stb_o,
+      wb_cyc_o     => wb_cyc_o,
+      wb_dat_i     => wb_dat_i,
+      wb_err_i     => wb_err_i,
+      wb_ack_i     => wb_ack_i);
+  
+  wb_test_slave_1: wb_test_slave
+    port map (
+      rst_n_i    => wb_rst_o,
+      clk_sys_i  => wb_clk_o,
+      wb_adr_i   => wb_addr_o(2 downto 0),
+      wb_dat_i   => wb_dat_o,
+      wb_dat_o   => wb_dat_i,
+      wb_cyc_i   => wb_cyc_o,
+      wb_sel_i   => wb_sel_o,
+      wb_stb_i   => wb_stb_o,
+      wb_we_i    => wb_we_o,
+      wb_ack_o   => wb_ack_i,
+      wb_stall_o => wb_stall_i,
+      wbt_led_o  => wbt_led_o,
+      wbt_key_i  => wbt_key_i,
+      wbt_sw_i   => wbt_sw_i,
+      wbt_do1_o  => wbt_do1_o,
+      wbt_do2_o  => wbt_do2_o,
+      wbt_di1_i  => wbt_di1_i);
+
+  wbt_di1_i <= std_logic_vector(unsigned(wbt_do1_o)+unsigned(wbt_do2_o));
+
+  
   io_din <= x"000000" & uart_dout when io_addr_d = x"1000" else
             (0      => uart_ready, 1 => uart_dav, others => '0') when io_addr_d = x"2000" else
             wb_test_dout                                         when wb_addr_d = '1' else
+            jwb_dout when (jwb_regs='1' or jwb_data='1') else
             (others => '0');
   wb_addr <= '1' when mem_addr(15 downto 12) = x"8" else '0';
-  io_ready <= wb_ready when wb_addr = '1' else '1';
+  io_ready <= wb_ready when wb_addr = '1' else
+              jwb_ready when (jwb_regs = '1' or jwb_data='1') else
+              '1';
 
   -- component instantiation
   DUT : j1
