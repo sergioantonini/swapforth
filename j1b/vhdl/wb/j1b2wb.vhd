@@ -6,7 +6,7 @@
 -- Author     : Wojciech M. Zabolotny  <wzab@ise.pw.edu.pl>
 -- Company    : Institute of Electronic Systems, Warsaw University of Technology
 -- Created    : 2016-07-19
--- Last update: 2016-07-19
+-- Last update: 2016-07-26
 -- License    : This is a PUBLIC DOMAIN code, published under
 --              Creative Commons CC0 license
 -- Platform   : 
@@ -29,7 +29,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.all;
 use ieee.numeric_std.all;
 library work;
-
+use work.txt_util.all;
 entity j1b2wb is
 
   generic (
@@ -99,7 +99,7 @@ architecture beh of j1b2wb is
 begin  -- architecture beh
 
   wb_clk_o <= J1B_CLK;
-  wb_rst_o <= J1B_ARESETN;
+  wb_rst_o <= not J1B_ARESETN;
   wb_sel_o <= (others => '1');          -- We support only whole word accesses
 
   -- Process generating the WB signals
@@ -155,6 +155,9 @@ begin  -- architecture beh
     if J1B_ARESETN = '0' then           -- asynchronous reset (active low)
       J1B_REGS <= (others => (others => '0'));
     elsif J1B_CLK'event and J1B_CLK = '1' then  -- rising clock edge
+      if J1B_IO_WR='1' and J1B_WB_DATA='1' then
+        report "write J1WB addr:" & hstr (J1B_IO_ADDR) & "data:" & hstr (J1B_DOUT) severity note;
+      end if;
       J1B_DIN <= s_J1B_DIN;
       if J1B_IO_WR = '1' and J1B_WB_REGS = '1' then
         report "write to J1B regs:" & integer'image(to_integer(unsigned(J1B_DOUT))) severity note;
