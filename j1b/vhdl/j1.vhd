@@ -18,33 +18,34 @@ entity j1 is
     io_rd     : out std_logic;
     io_wr     : out std_logic;
     io_ready  : in  std_logic;
-    mem_addr  : out unsigned(15 downto 0);
+    mem_addr  : out unsigned(15 downto 0)              := (others => '0');
     mem_wr    : out std_logic;
-    dout      : out std_logic_vector(WIDTH-1 downto 0);
+    dout      : out std_logic_vector(WIDTH-1 downto 0) := (others => '0');
     mem_din   : in  std_logic_vector(WIDTH-1 downto 0);
     io_din    : in  std_logic_vector(WIDTH-1 downto 0);
-    code_addr : out unsigned(12 downto 0);
+    code_addr : out unsigned(12 downto 0)              := (others => '0');
     insn      : in  std_logic_vector(15 downto 0)
     );
 end entity;
 
 architecture rtl of j1 is
 
-  signal dsp, dspN : std_logic_vector(4 downto 0);        -- Data stack pointer
-  signal st0, st0N : std_logic_vector(WIDTH-1 downto 0);  -- Top of data stack
-  signal dstkW     : std_logic;                           -- D stack write
+  signal dsp, dspN : std_logic_vector(4 downto 0)       := (others => '0');  -- Data stack pointer
+  signal st0, st0N : std_logic_vector(WIDTH-1 downto 0) := (others => '0');  -- Top of data stack
+  signal dstkW     : std_logic;         -- D stack write
 
-  signal s_io_wr, s_io_rd                                           : std_logic;
-  signal pc, pcN, pc_plus_1                                         : std_logic_vector(12 downto 0);
-  signal rstkW                                                      : std_logic;  -- R stack write
-  signal rstkD                                                      : std_logic_vector(WIDTH-1 downto 0);  -- R stack write value
-  signal reboot                                                     : std_logic := '1';
-  signal st1, rst0                                                  : std_logic_vector(WIDTH-1 downto 0);
-  signal func_T_N, func_T_R, func_write, func_iow, func_ior, is_alu : std_logic;
-  signal dspI, rspI                                                 : std_logic_vector(1 downto 0);
+  signal s_io_wr, s_io_rd                                           : std_logic                          := '0';
+  signal pc, pcN, pc_plus_1                                         : std_logic_vector(12 downto 0)      := (others => '0');
+  signal rstkW                                                      : std_logic                          := '0';  -- R stack write
+  signal rstkD                                                      : std_logic_vector(WIDTH-1 downto 0) := (others => '0');  -- R stack write value
+  signal reboot                                                     : std_logic                          := '1';
+  signal st1, rst0                                                  : std_logic_vector(WIDTH-1 downto 0) := (others => '0');
+  signal func_T_N, func_T_R, func_write, func_iow, func_ior, is_alu : std_logic                          := '0';
+  signal dspI, rspI                                                 : std_logic_vector(1 downto 0)       := (others => '0');
 
-  signal no_wait : boolean;
-  
+  signal no_wait : boolean   := true;
+  signal clk_ena : std_logic := '0';
+
   function or_reduce (
     constant vec : std_logic_vector)
     return std_logic is
@@ -64,11 +65,12 @@ architecture rtl of j1 is
       WIDTH : integer;
       DEPTH : integer);
     port (
-      clk   : in  std_logic;
-      rd    : out std_logic_vector(WIDTH-1 downto 0);
-      we    : in  std_logic;
-      delta : in  std_logic_vector(1 downto 0);
-      wd    : in  std_logic_vector(WIDTH-1 downto 0));
+      clk     : in  std_logic;
+      clk_ena : in  std_logic;
+      rd      : out std_logic_vector(WIDTH-1 downto 0);
+      we      : in  std_logic;
+      delta   : in  std_logic_vector(1 downto 0);
+      wd      : in  std_logic_vector(WIDTH-1 downto 0));
   end component stack;
 
 begin  -- architecture rtl
@@ -82,22 +84,24 @@ begin  -- architecture rtl
       WIDTH => WIDTH,
       DEPTH => 32)
     port map (
-      clk   => clk,
-      rd    => st1,
-      we    => dstkW,
-      delta => dspI,
-      wd    => st0);
+      clk     => clk,
+      clk_ena => clk_ena,
+      rd      => st1,
+      we      => dstkW,
+      delta   => dspI,
+      wd      => st0);
   --stack #(.DEPTH(32)) rstack(.clk(clk), .rd(rst0), .we(rstkW), .wd(rstkD), .delta(rspI));
   stack_2 : stack
     generic map (
       WIDTH => WIDTH,
       DEPTH => 32)
     port map (
-      clk   => clk,
-      rd    => rst0,
-      we    => rstkW,
-      delta => rspI,
-      wd    => rstkD);
+      clk     => clk,
+      clk_ena => clk_ena,
+      rd      => rst0,
+      we      => rstkW,
+      delta   => rspI,
+      wd      => rstkD);
 
   --always @*
   --begin
@@ -277,7 +281,8 @@ begin  -- architecture rtl
 
   -- The simplistic implementation of I/O wait needed for more complex I/O
   -- busses. No timeout. Corrupted peripheral may hang the system
-  no_wait <= (io_ready = '1') or ((s_io_wr = '0') and (s_io_rd = '0'));
+  no_wait   <= (io_ready = '1') or ((s_io_wr = '0') and (s_io_rd = '0'));
+  clk_ena   <= '1'           when no_wait else '0';
   code_addr <= unsigned(pcN) when no_wait else unsigned(pc);
 
   process (clk, resetq) is
@@ -289,7 +294,7 @@ begin  -- architecture rtl
       st0    <= (others => '0');
     elsif clk'event and clk = '1' then  -- rising clock edge
       reboot <= '0';
-      if no_wait then 
+      if no_wait then
         pc  <= pcN;
         dsp <= dspN;
         st0 <= st0N;
