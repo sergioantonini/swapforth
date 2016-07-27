@@ -64,6 +64,37 @@ a base !
 \ Next bytes contain the data to be sent
 
 : i2c_wr ( dtaptr addr -- )
+  2* I2C_REGS 3 + io! \ set address
+  128 16 or I2C_REGS 4 + io! \ CMD: STA+WR
+  \ Wait for ACK
+  begin 
+    I2C_REGS 4 + io@
+    dup 2 and while
+    drop 
+  repeat
+  128 and if
+     \ NACK in address
+      133 err_halt then
+  \ Read the length of the data
+  dup c@ \ dtaptr len --
+  \ Now we transfer data in the loop
+  begin
+    swap 1+ swap \ increase dtaptr
+    dup while
+    over c@	  
+    I2C_REGS 3 + io!
+    1- dup if 16 else 64 16 or then 
+    I2C_REGS 4 + io!
+    begin 
+      I2C_REGS 4 + io@
+      dup 2 and while
+      drop 
+    repeat
+    128 and if
+      \ NACK in data
+       134 err_halt then
+  repeat
+  2drop  
 ;  
 
      
