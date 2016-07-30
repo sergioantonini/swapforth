@@ -1,10 +1,19 @@
+\ The code below is written by Wojciech M. Zabolotny
+\ ( wzab01<at>gmail.com or wzab<at>ise.pw.edu.pl )
+\ It is available as PUBLIC DOMAIN or under Creative Commons CC0 License
+\
 \ In routines below I mark double cell opperands as x0 (LSW) x1 (MSW)
 \ The quadruple cell values are marked as x0 x1 x2 x3
 \ In case of calculated double cell results, they are described as (e.g. for a0*b1):
 \ a0*b1 (MSW) . (LSW)
 \ All values are unsigned
+
 4 cells buffer: UDres
 
+\ Find the value of the most significant bit in the cell
+-1 dup 1 rshift xor
+
+constant cell_msb
 \ Unfortunately we have only d< operator, which cant be used in the multiplication
 \ Below is the definition of the unsigned double compare
 : ud< ( a0 a1 b0 b1 -- flag )
@@ -68,6 +77,24 @@
     loop
     drop 2drop
 ;
+\ The word below shifts right by 1 bit the multiple precision buffer pointed by addr
+: n2/ ( addr n )
+    0 ( addr n 0) \ Simulate MSB from the previous word for first cell 
+    -rot ( 0 addr n)
+    0 do
+	( prev addr )
+	dup @ dup ( prev addr cur cur)
+	>r ( prev addr cur) ( R: cur)
+	1 rshift ( prev addr cur/2 ) ( R: cur)
+	rot or ( addr cur/2|prev ) ( R: cur) \ Or with MSB from the LSB of the previous word
+	over ! ( addr ) ( R: cur)
+	cell+  ( addr ) ( R: cur) \ Adjust the address
+	r> ( addr cur )
+	\ Now transfer the LSB from the previous word to the MSB of the current word
+	1 and negate dup 1 rshift xor
+	swap
+    loop
+;
 
 create x1 10 , 32 , 5 ,
 create x2 10 , 33 , 5 ,
@@ -121,8 +148,6 @@ create x4 11 , 32 , 5 ,
 	\ Now we can start the main division loop
 	\ We compare UDres with UDsub if UDres>UDsub, we set 1 in result and subtract UDsub from UDres
 	32 0 do
-	    \ First we shift UDsub by one bit to the right!
-	    \ Uncomplete!
 	loop
     else
 	." Overflow"
@@ -145,12 +170,13 @@ hex
 \ 0123456789abcdef  0123456789abcdef
   2000000030000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
 \ 0123456789abcdef  0123456789abcdef
-  0000000031000000. 5400023303353333. UDsub 2 cells + 2! UDsub 2!
+  1000000031000000. 5400023303353333. UDsub 2 cells + 2! UDsub 2!
 
 UDres UDsub 4 un-
 UDres dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
 cr
 UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
 
+: .UDsub ." UDsub: " UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u. ;
 
 
