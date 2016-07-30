@@ -35,6 +35,9 @@ constant cell_msb
     0 do
 	( adr1 adr2 flag)
 	drop ( adr1 adr2 )
+	over @ over @ u> if
+	    0 leave
+	then	  
 	over @ over @ u< dup
 	if
 	    leave
@@ -51,24 +54,17 @@ constant cell_msb
 \ To avoid problems with lack of borrow bit, we use double precision operations
 : un- ( adr1 adr2 n )
     \ Adjust buffers to point to LSW
-    .s cr
     swap over 1- cells + ( adr1 n adr2[LSW])
     -rot swap over 1- cells + ( adr2[LSW] n adr1[LSW])
     -rot ( adr1[LSW] adr2[LSW] n)
-    .s cr
     1 swap ( adr1[LSW] adr2[LSW] borrow_flag n)
     0 do
 	( adr1 adr2 borrow_flag)
-	.s cr
-	over @ -1 xor s>d ( adr1 adr2 borrow_flag -a1 .)
+	over @ -1 xor 0  ( adr1 adr2 borrow_flag -a1 .)
 	rot 0 ( adr1 adr2 a1 . borrow_flag .)
-	.s cr
 	D+ ( adr1 adr2 res_a . )
-	.s cr
 	3 pick @ 0 D+ ( adr1 adr2 res_b \ which will be treated as ( adr1 adr2 res borrow_flag )
-	.s cr
 	2dup u. u. cr
-	.s cr
 	swap ( adr1 adr2 borrow_flag res )
 	3 pick !
 	\ Adjust addresses
@@ -90,19 +86,25 @@ constant cell_msb
 	over ! ( addr ) ( R: cur)
 	cell+  ( addr ) ( R: cur) \ Adjust the address
 	r> ( addr cur )
-	\ Now transfer the LSB from the previous word to the MSB of the current word
-	1 and negate dup 1 rshift xor
+	\ Now transfer the LSB from the current word to the MSB of the next word
+	1 and negate dup 1 rshift xor ( addr prev)
 	swap
     loop
+    drop drop
 ;
 
 \ Buffers for testing the "un<' word
+hex 
 create x1 10 , 32 , 5 ,
 create x2 10 , 33 , 5 ,
 create x3 10 , 32 , 6 ,
 create x4 11 , 32 , 5 ,
 
-
+create z1 20000000 , 30000000 , 54000233 , 3533333 ,
+create z2 34045FC0 , 23440033 , 0 , 0 ,
+create z3 5FDD020 , 1E5DFFE7 , D4000233 , 3533333 ,
+create z4 1A022FE0 , 11A20019 , 80000000 , 0 ,
+decimal
 
 : ud* ( a0 a1 b0 b1 -- ) \ Result is placed in UDres in order q3 q2 q1 q0
     ( a0 a1 b0 b1 )
@@ -139,26 +141,34 @@ create x4 11 , 32 , 5 ,
 ;    
 
 4 cells buffer: UDsub \ This buffer will be used to store the value subtracted from UDres
+: .UDsub ." UDsub: " UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u. cr ;
+: .UDres ." UDres: " UDres dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u. cr ;
 
 : ud/ ( a0 a1 -- b0 b1 ) \ b=UDres(q3 q2 q1 q0)/a 
     \ We can perform division only if q3 q2 is less than a0 a1,
     \ otherwise result won't fit in double precision result
-    2dup UDres 2@ ud< if
+    2dup UDres 2@ 2swap ud< if
 	UDsub 2! ( -- )
 	0. UDsub 2 cells + 2!
 	\ Now we can start the main division loop
 	\ We compare UDres with UDsub if UDres>UDsub, we set 1 in result and subtract UDsub from UDres
 	\ The result is built on the data stack
 	0. \ Result
-	32 0 do
+	64 0 do
+	    ." res0: " 2dup u. u.
 	    d2* \ Shift the previous result
+	    ." res2: " 2dup u. u. cr
+	    .UDres .UDsub 
+	    ." res3: " 2dup u. u.
 	    UDsub 4 n2/ \ Shift UDsub 1 bit to the right
+	    ." res4: " 2dup u. u.
 	    UDsub UDres 4 un< if
-		\ Set the LSB in the result
-		1 rot or swap;
+		\ Set the LSB in the double precision result
+		1 rot or swap
 		\ Subtract
 		UDres UDsub 4 un-
-	    then	    
+	    then
+	    ." res: " 2dup u. u.
 	loop
     else
 	." Overflow"
@@ -186,7 +196,13 @@ UDres UDsub 4 un-
 UDres dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
 cr
 UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
+cr
 
-: .UDsub ." UDsub: " UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u. ;
+\ Test the ud/ procedure
+\ 0123456789abcdef  0123456789abcdef
+  2000000030000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
+\ 0123456789abcdef 
+  34045fc023440033. ud/
+  d.
 
 
