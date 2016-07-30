@@ -96,6 +96,7 @@ constant cell_msb
     loop
 ;
 
+\ Buffers for testing the "un<' word
 create x1 10 , 32 , 5 ,
 create x2 10 , 33 , 5 ,
 create x3 10 , 32 , 6 ,
@@ -144,16 +145,25 @@ create x4 11 , 32 , 5 ,
     \ otherwise result won't fit in double precision result
     2dup UDres 2@ ud< if
 	UDsub 2! ( -- )
-	0. UDsub 1 cells + 2!
+	0. UDsub 2 cells + 2!
 	\ Now we can start the main division loop
 	\ We compare UDres with UDsub if UDres>UDsub, we set 1 in result and subtract UDsub from UDres
+	\ The result is built on the data stack
+	0. \ Result
 	32 0 do
+	    d2* \ Shift the previous result
+	    UDsub 4 n2/ \ Shift UDsub 1 bit to the right
+	    UDsub UDres 4 un< if
+		\ Set the LSB in the result
+		1 rot or swap;
+		\ Subtract
+		UDres UDsub 4 un-
+	    then	    
 	loop
     else
 	." Overflow"
 	136 throw
-    then
-    
+    then    
 ;
 
 : ud@ UDres 2@ swap UDres 2 cells + 2@ swap ;
