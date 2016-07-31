@@ -69,7 +69,6 @@ constant cell_msb
 	3 pick !
 	\ Adjust addresses
 	rot 1 cells - rot 1 cells - rot
-	1+ \ adjust borrow flag
     loop
     drop 2drop
 ;
@@ -201,6 +200,13 @@ cr
 \ Test the ud/ procedure
 \ 0123456789abcdef  0123456789abcdef
   2000000030000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
+\ 0123456789abcdef 
+  34045fc023440033. ud/
+  d.
+
+\ Test the ud/ procedure
+\ 0123456789abcdef  0123456789abcdef
+  0f56ca0003000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
 \ 0123456789abcdef 
   34045fc023440033. ud/
   d.
