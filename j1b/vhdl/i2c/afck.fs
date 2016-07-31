@@ -84,11 +84,11 @@ hex \ It is easier to define bit manipulation constants in hex mode
     3f and S5_RFREQ c! \ Store bits 39(37):32
     9 Si57x_rd ( frq r9 )
     S5_RFREQ 7 + c! \ Bits 31:24
-    10 Si57x_rd ( frq r10 )
+    a Si57x_rd ( frq r10 )
     S5_RFREQ 6 + c! \ Bits 23:16
-    11 Si57x_rd ( frq r11 )
+    b Si57x_rd ( frq r11 )
     S5_RFREQ 5 + c! \ Bits 15:8
-    12 Si57x_rd ( frq r12 )
+    c Si57x_rd ( frq r12 )
     S5_RFREQ 4 + c! \ Bits 7:0
 ;
 
@@ -194,11 +194,11 @@ hex
     S5_HSDIV 4 - 5 lshift or
     7 swap Si57x_wr    ( n1-1 )
     S5_RFREQ 4 + c@ \ Bits 7:0
-    12 swap Si57x_wr ( frq r12 )
+    c swap Si57x_wr ( frq r12 )
     S5_RFREQ 5 + c@ \ Bits 15:8
-    11 swap Si57x_wr ( frq r11 )
+    b swap Si57x_wr ( frq r11 )
     S5_RFREQ 6 + c@ \ Bits 23:16
-    10 swap Si57x_wr ( frq r10 )
+    a swap Si57x_wr ( frq r10 )
     S5_RFREQ 7 + c@ \ Bits 31:24
     9 swap Si57x_wr ( frq r9 )
     S5_N1 1- 6 lshift
