@@ -64,7 +64,7 @@ constant cell_msb
 	rot 0 ( adr1 adr2 a1 . borrow_flag .)
 	D+ ( adr1 adr2 res_a . )
 	3 pick @ 0 D+ ( adr1 adr2 res_b \ which will be treated as ( adr1 adr2 res borrow_flag )
-	2dup u. u. cr
+	\ 2dup u. u. cr
 	swap ( adr1 adr2 borrow_flag res )
 	3 pick !
 	\ Adjust addresses
@@ -129,12 +129,12 @@ decimal
     2dup   ( a1 q1 q2 q1 q2) ( R: b1 a0*b1 .)
     UDres 1 cells + 2! ( a1 q1 q2 ) ( R: b1 a0*b1 .)
     \ Now we can check if the overflow occured. It happened if the result is smaller then the addend
-    2r> ( Da1 uq1 uq2 Da0*Db1 .) ( R: Db1 ) 
+    2r> ( a1 uq1 uq2 a0*b1 .) ( R: b1 ) 
     ud< if
 	\ We have to add one to the q2 q3
 	UDres @ 1+ UDres !
     then
-    r>
+    r> ( a1 b1 )
     um*
     UDres 2@ D+ UDres 2!
 ;    
@@ -154,20 +154,20 @@ decimal
 	\ The result is built on the data stack
 	0. \ Result
 	64 0 do
-	    ." res0: " 2dup u. u.
+	    \ .UDres .UDsub 
+	    \ ." res0: " 2dup u. u.
 	    d2* \ Shift the previous result
-	    ." res2: " 2dup u. u. cr
-	    .UDres .UDsub 
-	    ." res3: " 2dup u. u.
+	    \ ." res2: " 2dup u. u. cr
+	    \ ." res3: " 2dup u. u.
 	    UDsub 4 n2/ \ Shift UDsub 1 bit to the right
-	    ." res4: " 2dup u. u.
+	    \ ." res4: " 2dup u. u.
 	    UDsub UDres 4 un< if
 		\ Set the LSB in the double precision result
 		1 rot or swap
 		\ Subtract
 		UDres UDsub 4 un-
 	    then
-	    ." res: " 2dup u. u.
+	    \ ." res: " 2dup u. u.
 	loop
     else
 	." Overflow"
@@ -191,24 +191,24 @@ hex
 \ 0123456789abcdef  0123456789abcdef
   1000000031000000. 5400023303353333. UDsub 2 cells + 2! UDsub 2!
 
-UDres UDsub 4 un-
-UDres dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
-cr
-UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
-cr
+\ UDres UDsub 4 un-
+\ UDres dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
+\ cr
+\ UDsub dup @ u. cell+ dup @ u. cell+ dup @ u. cell+ @ u.
+\ cr
 
 \ Test the ud/ procedure
 \ 0123456789abcdef  0123456789abcdef
-  2000000030000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
+\  2000000030000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
 \ 0123456789abcdef 
-  34045fc023440033. ud/
-  d.
+\  34045fc023440033. ud/
+\  d.
 
 \ Test the ud/ procedure
 \ 0123456789abcdef  0123456789abcdef
-  0f56ca0003000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
+\  0f56ca0003000000. 5400023303533333. UDres 2 cells + 2! UDres 2!
 \ 0123456789abcdef 
-  34045fc023440033. ud/
-  d.
+\  34045fc023440033. ud/
+\  d.
 
 
