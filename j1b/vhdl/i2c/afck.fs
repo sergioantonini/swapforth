@@ -70,7 +70,7 @@ hex \ It is easier to define bit manipulation constants in hex mode
     \ read RFREQ and HSDIV
     7 Si57x_rd ( frq r7 )
     dup 5 rshift 4 + S5_HSDIV !
-    2 lshift ( frq N1[6:2] )
+    1f and 2 lshift ( frq N1[6:2] )
     8 Si57x_rd ( frq N1[6:2] r8)
     dup 6 rshift ( frq N1[6:2] r8 N1[1:0] )
     rot or ( frq r8 N1 )
@@ -122,7 +122,7 @@ decimal
 : Si57x_calc_setgs ( frq -- )
     \ First we should calculate fxtal as (100e6 << 28)/rfreq*hsdiv*n1
     \ First calculate hsdiv*n1
-    S5_HSDIV @ S5_N1 @ um* ( n1*hs_div . )
+    S5_HSDIV @ S5_N1 @ um* ( frq n1*hs_div . )
     .s cr
     \ Multiply it by 100E6*1<<28, result will be stored in UDres
     100E6*1<<28 
@@ -175,8 +175,8 @@ decimal
 	    leave
 	then
 	drop
-    loop
-    dup 128 over < if
+    loop ( frq n1v)
+    128 over < if
 	\ N1V above 128 means, that no correct setting was found
 	131 throw
     then
