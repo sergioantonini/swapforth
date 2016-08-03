@@ -3,9 +3,20 @@
 \ ( wzab01<at>gmail.com or wzab<at>ise.pw.edu.pl )
 \ It is available as PUBLIC DOMAIN or under Creative Commons CC0 License
 \
+hex
+0201 constant I2C_BUS_SEL 
+decimal
+
+\ Procedures for selecting the bus handled by the J1B I2C controller
+: bus_sel ( n_bus )
+    I2C_BUS_SEL io!
+;
+decimal
 \ I2C_MUX
 112 constant I2C_MUX 
 10 constant I2C_MUX_Si57x \ Value required to access Si57x
+12 constant I2C_MUX_ADN4604 \ Value required to access ADN4604
+
 \ Indexed access (to ADN4604 and Si57x)
 create I2C_2buf 2 c, 0 c, 0 c, \ Buffer of length 2
 : I2C_ind_rd ( reg_nr addr -- val )
@@ -123,15 +134,15 @@ decimal
     \ First we should calculate fxtal as (100e6 << 28)/rfreq*hsdiv*n1
     \ First calculate hsdiv*n1
     S5_HSDIV @ S5_N1 @ um* ( frq n1*hs_div . )
-    .s cr
+    \ .s cr
     \ Multiply it by 100E6*1<<28, result will be stored in UDres
     100E6*1<<28 
-    .s cr
+    \ .s cr
     ud*
     .UDres .UDsub
     \ Divide it by RFREQ and store to S5_FXTAL
     S5_RFREQ 2@ ud/
-    .s cr
+    \ .s cr
     \ The frequency should fit into single precision
     if
 	132 throw
@@ -144,21 +155,21 @@ decimal
 	1 ( frq n1v )
 	1 0 do \ This will be indefinite loop ended by 0 +LOOP. That allows creating of loops with multiple exit points
 	    ( frq n1v )
-	    dup .
+	    \ dup .
 	    dup 128 > if
 		leave
 	    then
 	    \ Calculate the FDCO value
-	    S5_HSDIV @ dup . ( frq n1v hsdv[i] )
+	    S5_HSDIV @ ( frq n1v hsdv[i] )
 	    over * ( frq n1v hsdv[i]*n1v )
 	    2 pick um* ( frq n1v fdco . )
 	    2dup S5_FDCO 2!
-	    2dup d. cr
+	    \ 2dup d. cr
 	    2dup S5_FDCOL D< if
 		2drop 
 	    else
 		S5_FDCOH  D< if
-		    ." Found! "
+		    \ ." Found! "
 		    leave
 		then
 	    then
@@ -181,6 +192,7 @@ decimal
 	131 throw
     then
     S5_N1 !
+    drop \ drop the frq
     \ Calculate the new value of RFREQ - the NFREQ
     \ 28 is 1c in hex!
     S5_FDCO 2@ 1 28 lshift S5_FXTAL @ M*/ S5_RFREQ 2!    
@@ -190,8 +202,8 @@ hex
 : Si57x_write_setgs
     89 10 Si57x_wr
     87 30 Si57x_wr
-    S5_N1 1-  2 rshift
-    S5_HSDIV 4 - 5 lshift or
+    S5_N1 @ 1-  2 rshift
+    S5_HSDIV @ 4 - 5 lshift or
     7 swap Si57x_wr    ( n1-1 )
     S5_RFREQ 4 + c@ \ Bits 7:0
     c swap Si57x_wr ( frq r12 )
@@ -201,8 +213,8 @@ hex
     a swap Si57x_wr ( frq r10 )
     S5_RFREQ 7 + c@ \ Bits 31:24
     9 swap Si57x_wr ( frq r9 )
-    S5_N1 1- 6 lshift
-    S5_RFREQ @ 3f and or 8 swap Si57x_wr
+    S5_N1 @ 1- 6 lshift
+    S5_RFREQ c@ 3f and or 8 swap Si57x_wr
     89 0 Si57x_wr
     87 40 Si57x_wr
 ;    
@@ -215,5 +227,52 @@ hex
     Si57x_calc_setgs
     Si57x_write_setgs
     Si57x_old_mux @ I2C_MUX i2c_wr1
-    ;    
-decimal     
+;    
+decimal
+
+\ Procedures to control the clock matrix
+hex
+: ClkMtx_set_out ( n_in n_out -- )
+    over -1 < ( n_in n_out flag )
+    2 pick f > or if
+	." n_in must be between -1 and 15 "
+	83 throw
+    then ( n_in n_out )
+    dup 0 < over f > or if
+	." n_out must be between 0 and 15 "
+	83 throw
+    then ( n_in n_out )
+    4 bus_sel
+    I2C_MUX i2c_rd1 Si57x_old_mux !
+    I2C_MUX_ADN4604 I2C_MUX i2c_wr1
+    over -1 = if 
+	\ Switch off the output
+	20 + 0 ADN4604_wr drop 
+    else
+	\ Select the input and switch the output
+	\ Number of register as 0x90+n_out/2
+	\ Number of nibble as n_out % 2
+	\ Switch according to the nibble
+	dup 1 and if
+	    swap 4 lshift
+	    0f ( n_out n_in*16 mask )
+	else
+	    swap
+	    f0 ( n_out n_in mask )
+	then ( n_out n_in_shifted mask )
+	\ Calculate the number of register
+	rot ( n_in_shifted mask n_out )
+	dup >r  ( n_in_shifted mask n_out ) ( R: n_out)
+	1 rshift 90 + >r ( n_in_shifted mask ) ( R: n_out reg_adr )
+	r@ ADN4604_rd ( n_in_shifted mask old_val)
+	and or ( new_val ) ( R: n_out reg_adr )
+	r> swap ADN4604_wr
+	\ Trigger matrix update
+	81 00 ADN4604_wr
+	80 01 ADN4604_wr
+	\ Switch on the output
+	r> 20 + 30 ADN4604_wr
+    then
+    Si57x_old_mux @ I2C_MUX i2c_wr1
+;
+decimal
