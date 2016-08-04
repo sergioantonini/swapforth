@@ -1,6 +1,8 @@
 -- This file implements the orginal J1 Forth CPU written by James Bowman
 -- but translated to VHDL by Wojciech M. Zabolotny
+-- see https://github.com/wzab/swapforth for the newest version of the port
 -- This file is licensed uder the original J1 license.
+-- see https://github.com/jamesbowman/swapforth for original sources.
 -- I have retained the original Verilog vode in comments, to allow
 -- verification of the translation
 
@@ -285,19 +287,21 @@ begin  -- architecture rtl
   clk_ena   <= '1'           when no_wait else '0';
   code_addr <= unsigned(pcN) when no_wait else unsigned(pc);
 
-  process (clk, resetq) is
+  process (clk) is
   begin  -- process
-    if resetq = '0' then                -- asynchronous reset (active low)
-      reboot <= '1';
-      pc     <= (others => '0');
-      dsp    <= (others => '0');
-      st0    <= (others => '0');
-    elsif clk'event and clk = '1' then  -- rising clock edge
-      reboot <= '0';
-      if no_wait then
-        pc  <= pcN;
-        dsp <= dspN;
-        st0 <= st0N;
+    if clk'event and clk = '1' then  -- rising clock edge
+      if resetq = '0' then                -- asynchronous reset (active low)
+        reboot <= '1';
+        pc     <= (others => '0');
+        dsp    <= (others => '0');
+        st0    <= (others => '0');
+      else
+        reboot <= '0';
+        if no_wait then
+          pc  <= pcN;
+          dsp <= dspN;
+          st0 <= st0N;
+        end if;
       end if;
     end if;
   end process;
