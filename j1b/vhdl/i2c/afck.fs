@@ -148,7 +148,6 @@ decimal
 	132 throw
     then
     S5_FXTAL ! ( frq )
-
     \ Now we should scan possible N1 and HSDIV vals, finding the best matched settings
     6 0 do
 	s5_hsdvs i cells + @ S5_HSDIV !
@@ -228,7 +227,171 @@ hex
     Si57x_write_setgs
     Si57x_old_mux @ I2C_MUX i2c_wr1
 ;    
+
 decimal
+\ Procedures to control the clock generator in the FM-S14 FMC board
+110 constant FMS14Q_ADR
+: FMS14Q_wr ( addr val -- )
+    FMS14Q_ADR I2C_ind_wr
+;
+
+: FMS14Q_rd ( addr -- val )
+    FMS14Q_ADR I2C_ind_rd
+;
+
+\ Variables
+variable S14_CP0
+variable S14_N0
+variable S14_M0 \ It is stored multiplied by 1 << 18
+create S14_PVs 1 , 2 , 4 , 5 ,
+variable S14_P0
+variable S14_P0V
+2variable S14_FVCO
+2variable S14_FREF
+decimal
+212500000 constant S14_FOUT0
+1950 1000000 um* 2constant S14_FVCOL
+2600 1000000 um* 2constant S14_FVCOH
+decimal
+: FMS14Q_sim_read ( -- )
+    \ Read settings for config 0
+    4874232 S14_M0 ! 10 S14_N0 !
+    S14_FOUT0 1 18 lshift UM* ( fout0*[1<<18] )
+    S14_N0 @ S14_M0 @ m*/ ( fref0 . )
+    S14_FREF 2! ( )
+    \ Print results
+    ." S14_M0*2^18=" S14_M0 @ .
+    ." S14_N0=" S14_N0 @ .
+    ." S14_FREF0=" S14_FREF 2@ d.
+;
+hex
+: FMS14Q_read_setgs ( -- )
+    \ Read settings for config 0
+    0 FMS14Q_rd ( r0 )
+    dup 6 rshift S14_CP0 !
+    3f and 11 lshift S14_M0 !
+    4 FMS14Q_rd ( r4 )
+    9 lshift S14_M0 @ or S14_M0 !
+    8 FMS14Q_rd ( r8 )
+    1 lshift S14_M0 @ or S14_M0 !
+    c FMS14Q_rd ( r12 )
+    dup 7 rshift S14_M0 @ or S14_M0 !
+    7f and S14_N0 !
+    14 FMS14Q_rd ( r20 )
+    dup 6 rshift ( r20 P0 )
+    \ Translate P0 into P0V
+    S14_PVs + c@ S14_P0V !
+    20 and 17 5 - lshift S14_M0 @ or S14_M0 !
+    \ Calculate FREF0 ( 18 in hex is 12 !!!)
+    S14_FOUT0 1 12 lshift UM* ( fout0*[1<<18] )
+    S14_N0 @ S14_M0 @ m*/ ( fref0 . )
+    S14_FREF 2! ( )
+    \ Print results
+    ." S14_M0*2^18=" S14_M0 @ .
+    ." S14_N0=" S14_N0 @ .
+    ." S14_FREF0=" S14_FREF 2@ d.
+;
+: FMS14Q_calc_setgs ( frq )
+\ Now we find the right divisor
+    4 0 do ( frq )
+	\ Get PV
+	i S14_P0 !
+	2 S14_N0 !
+	1 0 do ( frq )
+	    S14_PVs S14_P0 @ cells + @ dup S14_P0V ! ( frq pv )
+	    S14_N0 @ ( frq pv N )
+	    ." a:" .s cr
+	    7e over < if
+		drop drop
+		leave ( frq ) 
+	    then ( frq pv N )
+	    \ Calculate fvco
+	    m* ( frq pv*N . )
+	    ." b:" .s cr
+	    2 pick 1 ( frq pv*N . frq 1 )
+	    ." c:" .s cr
+	    m*/ ( frq fvco . )
+	    ." d:" .s cr
+	    2dup S14_FVCO 2!
+	    \ 2dup d. cr
+	    2dup S14_FVCOL D< if
+		2drop 
+	    else
+		S14_FVCOH  D< if
+		    ." Found! "
+		    leave
+		then
+	    then ( frq )
+	    \ Update N
+	    S14_N0 @
+	    dup 6 < if
+		1+
+	    else
+		2 +
+	    then
+	    S14_N0 !
+	0 +loop ( frq N )
+	S14_N0 @ 127 < if
+	    \ It means that the proper value was found!
+	    leave
+	then
+	.s
+    loop ( frq )
+    \ Calculate M=FVCO/FREF to get the value properly scaled, multiply FVCO first by 1<<18)
+    S14_FVCO 2@ 
+    2dup ." fvco=" d.
+    1 12 lshift 0 ud* ( )
+    .UDres
+    S14_FREF 2@ 
+    2dup ." fref=" d.
+    ud/ ( M . )
+    ffffff. 2over d< if
+	." Lower  M is too big " d.
+	87 throw 
+    then
+    2dup ." M=" d.
+    drop
+    dup S14_M0 !
+;
+
+: FMS14Q_write_setgs
+    \ So now we are ready to write the results, copying other settings from channel 0
+    S14_CP0 @ 6 lshift
+    over 7e0000 and 17 rshift or
+    3 swap FMS14Q_wr ( M )
+    ." o1 " depth .
+    dup 9 rshift ff and
+    7 swap FMS14Q_wr ( M )
+    ." o2 " depth .
+    dup 1 rshift ff and
+    b swap FMS14Q_wr ( M )
+    ." o3 " depth .
+    dup 1 and 7 lshift
+    S14_N0 @ 7f and or
+    f swap FMS14Q_wr ( M )
+    ." o4 " depth .
+    14 FMS14Q_rd 1f and
+    S14_P0 @ 6 lshift or
+    swap 800000 and 17 5 - rshift or    
+    17 swap FMS14Q_wr ( )
+    ." o5 " depth .
+    \ Now toggle the FSEL bits
+    12 FMS14Q_rd
+    dup e7 and
+    ." o6 " depth .
+    12 swap FMS14Q_wr
+    18 or
+    ." o7 " depth .
+    12 swap FMS14Q_wr
+    ." o8 " depth .
+;
+
+: FMS14Q_SetFrq ( frq -- )
+    FMS14Q_read_setgs
+    FMS14Q_calc_setgs
+    FMS14Q_write_setgs
+;
+
 
 \ Procedures to control the clock matrix
 hex
